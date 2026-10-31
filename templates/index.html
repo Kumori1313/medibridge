@@ -1,0 +1,176 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediBridge</title>
+    <link rel="stylesheet" href="/static/style.css">
+
+
+<body>
+    <h1>MediBridge</h1>
+    <p>Making healthcare documents accessible to everyone.</p>
+
+    <h2>Scan a Medical Document</h2>
+
+    <input type="file" id="document" accept="image/*">
+    <button onclick="scanDocument()">Scan Document</button>
+
+    <h2>Extracted Text</h2>
+    <p id="result" style="white-space: pre-wrap;"></p>
+
+    <h2>Audio Controls</h2>
+
+    <button onclick="readAloud()">🔊 Read Aloud</button>
+    <button onclick="pauseReading()">⏸ Pause / Resume</button>
+    <button onclick="stopReading()">⏹ Stop</button>
+
+
+    <h2>Live Captions</h2>
+    <p>Turn spoken instructions into text.</p>
+
+    <button onclick="startCaptions()">Start Captions</button>
+    <button onclick="stopCaptions()">Stop Captions</button>
+
+    <p id="captionStatus" role="status">Microphone off</p>
+    <p id="captions" style="font-size: 24px;"></p>
+
+
+    <script>
+        // Upload the image and get the extracted text
+        async function scanDocument() {
+            const file = document.getElementById("document").files[0];
+            const result = document.getElementById("result");
+
+            if (!file) {
+                alert("Please select an image first.");
+                return;
+            }
+
+            speechSynthesis.cancel();
+            result.innerText = "Scanning document...";
+
+            const formData = new FormData();
+            formData.append("document", file);
+
+            try {
+                const response = await fetch("/scan", {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error("Scan failed.");
+                }
+
+                const data = await response.json();
+                result.innerText = data.text || "No text found.";
+
+            } catch (error) {
+                result.innerText = "Something went wrong. Please try again.";
+                console.error(error);
+            }
+        }
+
+        // Read the extracted text out loud
+        function readAloud() {
+            const text = document.getElementById("result").innerText;
+
+            if (!text.trim() || text === "Scanning document...") {
+                alert("Please scan a document first.");
+                return;
+            }
+
+            speechSynthesis.cancel();
+
+            const speech = new SpeechSynthesisUtterance(text);
+            speech.lang = "en-US";
+            speech.rate = 0.9;
+
+            speech.onerror = function(event) {
+                console.log("Speech error:", event.error);
+            };
+
+            speechSynthesis.speak(speech);
+        }
+
+        // Pause or resume the audio
+        function pauseReading() {
+            if (speechSynthesis.paused) {
+                speechSynthesis.resume();
+            } else {
+                speechSynthesis.pause();
+            }
+        }
+
+        // Stop reading completely
+        function stopReading() {
+            speechSynthesis.cancel();
+        }
+
+        
+        // Live captions for spoken instructions
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        let recognition;
+        let captionsRunning = false;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.lang = "en-US";
+            recognition.continuous = true;
+            recognition.interimResults = true;
+
+            recognition.onresult = function(event) {
+                let text = "";
+
+                for (let i = 0; i < event.results.length; i++) {
+                    text += event.results[i][0].transcript + " ";
+                }
+
+                document.getElementById("captions").innerText = text;
+            };
+
+            recognition.onerror = function(event) {
+                document.getElementById("captionStatus").innerText =
+                    "Microphone error: " + event.error;
+            };
+
+            recognition.onend = function() {
+                captionsRunning = false;
+                document.getElementById("captionStatus").innerText = "Microphone off";
+            };
+        }
+
+        function startCaptions() {
+            if (!recognition) {
+                alert("Live captions are not supported in this browser. Try Chrome.");
+                return;
+            }
+
+            if (captionsRunning) return;
+
+            document.getElementById("captions").innerText = "";
+
+            try {
+                recognition.start();
+                captionsRunning = true;
+                document.getElementById("captionStatus").innerText = "Listening...";
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        function stopCaptions() {
+            if (recognition && captionsRunning) {
+                recognition.stop();
+            }
+
+            captionsRunning = false;
+            document.getElementById("captionStatus").innerText = "Microphone off";
+        }
+
+    </script>
+</body>
+</html>
